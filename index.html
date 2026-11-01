@@ -19,14 +19,14 @@
 /* Layout: one column, month header + total on top, day-grouped list, thumb-reach add button fixed at the bottom */
 :root {
   --bg: #f3f4f8; --card: #ffffff; --fg: #161a2b; --muted: #6a7088; --line: #e1e4ee;
-  --accent: #2f4bd8; --accent-fg: #ffffff; --danger: #c73a3a;
+  --accent: #2f4bd8; --accent-fg: #ffffff; --danger: #c73a3a; --warn: #c27a12;
   --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
   --body: "Figtree", "Segoe UI", system-ui, sans-serif;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) { :root {
   --bg: #0f1220; --card: #181c2e; --fg: #eceefa; --muted: #959bb5; --line: #272c44;
-  --accent: #7d8fff; --accent-fg: #0f1220; --danger: #ff7a7a; color-scheme: dark } }
+  --accent: #7d8fff; --accent-fg: #0f1220; --danger: #ff7a7a; --warn: #f0a742; color-scheme: dark } }
 
 * { box-sizing: border-box }
 [hidden] { display: none !important }
@@ -47,6 +47,20 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .total .big { font: 800 clamp(2.6rem, 13vw, 3.6rem)/1 var(--display); letter-spacing: -.02em; }
 .total .sub { color: var(--muted); font-size: .9rem; }
 
+.budget-set { width: 100%; min-height: 48px; border: 1px dashed var(--line); border-radius: 14px; background: none; color: var(--accent); font-weight: 600; }
+.budget-box { width: 100%; display: grid; gap: 8px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); text-align: left; --state: var(--accent); }
+.budget-box[data-state="near"] { --state: var(--warn); }
+.budget-box[data-state="over"] { --state: var(--danger); }
+.budget-bar { display: block; height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; }
+.budget-bar i { display: block; height: 100%; border-radius: 5px; background: var(--state); }
+.budget-line { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: .92rem; }
+.budget-line b { color: var(--state); font-weight: 600; }
+.budget-line span { color: var(--muted); }
+.budget-form { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+.budget-input { display: flex; align-items: center; gap: 8px; }
+.budget-input b { font: 600 1.2rem var(--display); color: var(--muted); }
+.budget-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.budget-actions .remove { color: var(--fg); }
 .cats { display: grid; gap: 8px; }
 .cat-row { display: grid; grid-template-columns: 7.5rem 1fr auto; align-items: center; gap: 10px; font-size: .9rem; }
 .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
@@ -68,6 +82,7 @@ h2 { margin: 0 0 8px; font: 600 .8rem var(--body); color: var(--muted); text-tra
 .history .col { align-self: end; border-radius: 6px 6px 2px 2px; background: var(--line); min-height: 3px; }
 .history button[aria-current="true"] .col { background: var(--accent); }
 .history button[aria-current="true"] { color: var(--fg); font-weight: 600; }
+.history button.over .col { background: var(--danger); }
 
 .empty, .note { margin: 0; color: var(--muted); background: var(--card); border: 1px dashed var(--line); border-radius: 14px; padding: 20px; text-align: center; }
 .foot { text-align: center; }
@@ -140,6 +155,25 @@ body.locked { overflow: hidden; }
       <span class="label">Dépensé ce mois</span>
       <span class="big num" id="total">0,00 €</span>
       <span class="sub" id="sub"></span>
+    </section>
+
+    <section class="budget">
+      <button class="budget-set" id="budgetSet" hidden>+ Définir un budget mensuel</button>
+      <button class="budget-box" id="budgetBox" hidden aria-label="Modifier le budget mensuel">
+        <span class="budget-bar"><i id="budgetFill"></i></span>
+        <span class="budget-line"><b class="num" id="budgetLeft"></b><span class="num" id="budgetOf"></span></span>
+      </button>
+      <form class="budget-form" id="budgetForm" hidden novalidate>
+        <label class="lbl"><span>Budget par mois</span>
+          <span class="budget-input"><input class="field" id="budgetInput" inputmode="decimal" autocomplete="off" placeholder="800"><b>€</b></span>
+        </label>
+        <p class="err" id="budgetErr" hidden></p>
+        <div class="budget-actions">
+          <button type="button" class="remove" id="budgetCancel">Annuler</button>
+          <button class="submit" id="budgetSave">Enregistrer</button>
+        </div>
+        <button type="button" class="link" id="budgetClear" hidden>Retirer le budget</button>
+      </form>
     </section>
 
     <p class="note" id="status" hidden></p>
@@ -224,11 +258,23 @@ function parseCents(s) {
   return c > 0 ? c : null;
 }
 
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+});
+// Our own copy of the refresh token: Supabase wipes its stored session when a refresh fails
+// (e.g. app reopened with no network yet); with this copy we reconnect instead of asking for the password.
+const KEEP = "cashtrack-refresh";
+const keep = {
+  get: () => { try { return localStorage.getItem(KEEP); } catch { return null; } },
+  set: t => { try { localStorage.setItem(KEEP, t); } catch {} },
+  clear: () => { try { localStorage.removeItem(KEEP); } catch {} },
+};
 
 let rows = [];         // expenses of the 6-month window ending at `month`
 let month = thisMonth();
 let editing = null;    // expense open in the sheet, null when adding
+let user = null;       // signed-in user; the monthly budget lives in user.user_metadata.budget_cents
+const budget = () => user?.user_metadata?.budget_cents || 0;
 let cat = "courses";
 let loadSeq = 0;
 
@@ -258,6 +304,20 @@ function render() {
   $("total").textContent = money(sum(items));
   $("sub").textContent = `${items.length} dépense${items.length > 1 ? "s" : ""}` +
     (prevTotal ? ` · ${monthLabel(prev, { month: "long" })} : ${money(prevTotal)}` : "");
+
+  // monthly budget
+  const goal = budget(), spent = sum(items);
+  const editingBudget = !$("budgetForm").hidden;
+  $("budgetSet").hidden = !!goal || editingBudget;
+  $("budgetBox").hidden = !goal || editingBudget;
+  if (goal) {
+    const ratio = spent / goal;
+    const state = ratio > 1 ? "over" : ratio >= 0.8 ? "near" : "ok";
+    $("budgetBox").dataset.state = state;
+    $("budgetFill").style.width = Math.min(ratio, 1) * 100 + "%";
+    $("budgetLeft").textContent = ratio > 1 ? `Dépassé de ${money(spent - goal)}` : `Reste ${money(goal - spent)}`;
+    $("budgetOf").textContent = `${Math.round(ratio * 100)} % de ${money(goal)}`;
+  }
 
   // by category
   const byCat = {};
@@ -316,6 +376,7 @@ function render() {
     b.setAttribute("aria-label", `${monthLabel(m)} : ${money(sums[i])}`);
     b.innerHTML = `<span class="col"></span><span class="num"></span><span></span>`;
     b.querySelector(".col").style.height = `${(sums[i] / hmax) * 100}%`;
+    if (budget() && sums[i] > budget()) b.classList.add("over");
     b.children[1].textContent = sums[i] ? Math.round(sums[i] / 100) + " €" : "–";
     b.children[2].textContent = monthLabel(m, { month: "short" });
     b.onclick = () => { month = m; render(); };  // already inside the loaded window
@@ -368,6 +429,35 @@ function closeSheet() {
 $("open").onclick = () => openSheet();
 $("cancel").onclick = closeSheet;
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(); });
+
+// monthly budget, stored on the account (user metadata) so it follows every device
+function openBudget() {
+  $("budgetInput").value = budget() ? String(budget() / 100).replace(".", ",") : "";
+  $("budgetErr").hidden = true;
+  $("budgetClear").hidden = !budget();
+  $("budgetForm").hidden = false; $("budgetSet").hidden = $("budgetBox").hidden = true;
+  $("budgetInput").focus();
+}
+const closeBudget = () => { $("budgetForm").hidden = true; render(); };
+async function saveBudget(cents) {
+  $("budgetSave").disabled = true;
+  const { data, error } = await sb.auth.updateUser({ data: { budget_cents: cents } });
+  $("budgetSave").disabled = false;
+  if (error) { $("budgetErr").textContent = "Enregistrement impossible. Vérifie ta connexion et réessaie."; $("budgetErr").hidden = false; return; }
+  user = data.user;
+  closeBudget();
+  toast(cents ? `Budget : ${money(cents)} par mois` : "Budget retiré");
+}
+$("budgetSet").onclick = openBudget;
+$("budgetBox").onclick = openBudget;
+$("budgetCancel").onclick = closeBudget;
+$("budgetClear").onclick = () => saveBudget(0);
+$("budgetForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const cents = parseCents($("budgetInput").value);
+  if (!cents) { $("budgetErr").textContent = "Entre un montant, par exemple 800."; $("budgetErr").hidden = false; return; }
+  saveBudget(cents);
+});
 
 // two taps to delete: the first arms the button, the second deletes
 $("remove").onclick = async () => {
@@ -436,13 +526,48 @@ $("loginForm").addEventListener("submit", async e => {
     $("toggleMode").click(); $("loginOk").hidden = false;
   }
 });
-$("logout").onclick = () => sb.auth.signOut();
+$("logout").onclick = () => { keep.clear(); sb.auth.signOut(); };
 
-sb.auth.onAuthStateChange((_event, session) => {
-  $("login").hidden = !!session;
-  $("app").hidden = !session;
-  // setTimeout: calling Supabase from inside this callback can deadlock its auth lock
-  if (session) { render(); setTimeout(load, 0); } else { rows = []; }
+const showApp = on => { $("login").hidden = on; $("app").hidden = !on; };
+// open straight on the app when we hold a token, instead of flashing the login screen
+if (keep.get()) showApp(true);
+try { $("email").value = localStorage.getItem("cashtrack-email") || ""; } catch {}
+
+let recovering = false;
+async function recover() {
+  const token = keep.get();
+  if (!token || recovering) return false;
+  recovering = true;
+  for (let i = 0; i < 3; i++) {   // retry: right after launch iOS may not have network yet
+    const { data, error } = await sb.auth.refreshSession({ refresh_token: token });
+    if (data?.session) { recovering = false; return true; }
+    if (error && /invalid|not found|revoked|already used/i.test(error.message)) break;  // token really dead
+    await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+  }
+  recovering = false;
+  if (keep.get() === token) { keep.clear(); showApp(false); }
+  return false;
+}
+
+sb.auth.onAuthStateChange((event, session) => {
+  if (session) {
+    keep.set(session.refresh_token);
+    try { localStorage.setItem("cashtrack-email", session.user.email || ""); } catch {}
+    user = session.user;
+    showApp(true);
+    // setTimeout: calling Supabase from inside this callback can deadlock its auth lock
+    if (event !== "TOKEN_REFRESHED") { render(); setTimeout(load, 0); }
+    return;
+  }
+  if (event === "SIGNED_OUT" && !keep.get()) { rows = []; user = null; showApp(false); return; }
+  // no session but we still hold a token: reconnect silently
+  if (keep.get()) { setTimeout(recover, 0); return; }
+  showApp(false);
+});
+
+// coming back to the app after a while: make sure the token is fresh
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") sb.auth.getSession().then(({ data }) => { if (!data.session) recover(); else load(); });
 });
 </script>
 </body>
