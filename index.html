@@ -20,13 +20,15 @@
 :root {
   --bg: #f3f4f8; --card: #ffffff; --fg: #161a2b; --muted: #6a7088; --line: #e1e4ee;
   --accent: #2f4bd8; --accent-fg: #ffffff; --danger: #c73a3a; --warn: #c27a12;
+  --good: #16824a; --good-fg: #ffffff; --good-soft: #e3f4ea;
   --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
   --body: "Figtree", "Segoe UI", system-ui, sans-serif;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) { :root {
   --bg: #0f1220; --card: #181c2e; --fg: #eceefa; --muted: #959bb5; --line: #272c44;
-  --accent: #7d8fff; --accent-fg: #0f1220; --danger: #ff7a7a; --warn: #f0a742; color-scheme: dark } }
+  --accent: #7d8fff; --accent-fg: #0f1220; --danger: #ff7a7a; --warn: #f0a742;
+  --good: #4fd18b; --good-fg: #0f1220; --good-soft: #17302a; color-scheme: dark } }
 
 * { box-sizing: border-box }
 [hidden] { display: none !important }
@@ -88,8 +90,36 @@ h2 { margin: 0 0 8px; font: 600 .8rem var(--body); color: var(--muted); text-tra
 .foot { text-align: center; }
 .link { border: 0; background: none; color: var(--muted); text-decoration: underline; font-size: .85rem; padding: 8px; }
 
-.fab { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom)); height: 60px; padding: 0 28px; border: 0; border-radius: 30px; background: var(--accent); color: var(--accent-fg); font: 600 1.05rem var(--body); box-shadow: 0 8px 24px rgb(20 30 90 / .3); display: flex; align-items: center; gap: 10px; }
+/* bottom dock: main add button + small round button to switch between expenses and incoming money */
+.dock { position: fixed; left: 0; right: 0; bottom: calc(20px + env(safe-area-inset-bottom)); display: flex; justify-content: center; align-items: center; gap: 12px; pointer-events: none; z-index: 10; }
+.dock > * { pointer-events: auto; }
+.fab { height: 60px; padding: 0 28px; border: 0; border-radius: 30px; background: var(--accent); color: var(--accent-fg); font: 600 1.05rem var(--body); box-shadow: 0 8px 24px rgb(20 30 90 / .3); display: flex; align-items: center; gap: 10px; }
 .fab span { font-size: 1.6rem; line-height: 1; }
+.fab em { font-style: normal; }
+.fab.good { background: var(--good); color: var(--good-fg); box-shadow: 0 8px 24px rgb(10 80 40 / .3); }
+.swap { position: relative; width: 52px; height: 52px; border: 0; border-radius: 50%; display: grid; place-items: center; box-shadow: 0 6px 18px rgb(20 30 60 / .25); }
+.swap.good { background: var(--good); color: var(--good-fg); }
+.swap.blue { background: var(--accent); color: var(--accent-fg); }
+.swap svg { width: 24px; height: 24px; }
+.badge.off { display: none; }
+.badge { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--fg); color: var(--bg); font: 600 .72rem/20px var(--body); }
+
+/* incoming money */
+.total .big.good { color: var(--good); }
+.incs { display: grid; gap: 10px; }
+.inc { display: grid; grid-template-columns: 1fr auto; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.inc-main { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; padding: 14px; border: 0; background: none; text-align: left; min-width: 0; }
+.inc-main .what { min-width: 0; }
+.inc-main b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-weight: 500; overflow-wrap: anywhere; }
+.inc-main small { color: var(--muted); }
+.inc-main .amt { font-weight: 600; color: var(--good); }
+.inc.done { grid-template-columns: 1fr; }
+.inc.done .inc-main .amt { color: var(--muted); }
+.got { align-self: stretch; margin: 8px 8px 8px 0; padding: 0 14px; border: 0; border-radius: 10px; background: var(--good-soft); color: var(--good); font-weight: 600; font-size: .9rem; }
+.view-title { margin: 0; font: 600 1.05rem var(--display); }
+.submit.good { background: var(--good); color: var(--good-fg); }
+.amount-field.good { border-bottom-color: var(--good); }
+.toggle { padding: 14px; border: 1px solid var(--good); border-radius: 14px; background: var(--good-soft); color: var(--good); font-weight: 600; }
 
 /* add / edit expense: a full-screen page, so nothing overflows and the iOS keyboard never hides the fields */
 .sheet { position: fixed; inset: 0; z-index: 21; background: var(--bg); overflow-y: auto; -webkit-overflow-scrolling: touch; padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); padding-top: calc(8px + env(safe-area-inset-top)); padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
@@ -144,7 +174,7 @@ body.locked { overflow: hidden; }
 </section>
 
 <main id="app" hidden>
-  <div class="wrap">
+  <div class="wrap" id="viewExp">
     <header class="month">
       <button class="nav" id="prev" aria-label="Mois précédent">‹</button>
       <h1 id="monthName">…</h1>
@@ -193,7 +223,35 @@ body.locked { overflow: hidden; }
     <div class="foot"><button class="link" id="logout">Se déconnecter</button></div>
   </div>
 
-  <button class="fab" id="open"><span>+</span> Dépense</button>
+  <div class="wrap" id="viewInc" hidden>
+    <h1 class="view-title">Rentrées d'argent</h1>
+
+    <section class="total">
+      <span class="label">En attente de réception</span>
+      <span class="big good num" id="incTotal">0,00 €</span>
+      <span class="sub" id="incSub"></span>
+    </section>
+
+    <p class="note" id="incStatus" hidden></p>
+
+    <section>
+      <h2>En attente</h2>
+      <div class="incs" id="incPending"></div>
+    </section>
+
+    <section>
+      <h2>Reçus</h2>
+      <div class="incs" id="incDone"></div>
+    </section>
+  </div>
+
+  <div class="dock" id="dock">
+    <button class="fab" id="open"><span>+</span> <em id="openLabel">Dépense</em></button>
+    <button class="swap good" id="swap" aria-label="Rentrées d'argent">
+      <svg id="swapIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
+      <span class="badge num" id="badge" hidden></span>
+    </button>
+  </div>
 </main>
 
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
@@ -219,6 +277,29 @@ body.locked { overflow: hidden; }
     <p class="err" id="err" hidden></p>
     <button class="submit" id="save">Ajouter</button>
     <button type="button" class="remove" id="remove" hidden>Supprimer la dépense</button>
+  </form>
+</div>
+<div class="sheet" id="incSheet" role="dialog" aria-modal="true" aria-labelledby="incTitle" hidden>
+  <form id="incForm" novalidate>
+    <div class="sheet-head">
+      <button type="button" id="incCancel">Annuler</button>
+      <h2 id="incTitle">Argent à recevoir</h2>
+      <span></span>
+    </div>
+    <label class="amount-field good">
+      <input id="incAmount" inputmode="decimal" autocomplete="off" placeholder="0,00" aria-label="Montant attendu">
+      <span>€</span>
+    </label>
+    <label class="lbl"><span>Description</span>
+      <input class="field" id="incDesc" placeholder="Ex. Remboursement resto par Léa" autocomplete="off" maxlength="80">
+    </label>
+    <label class="lbl"><span>En attente depuis</span>
+      <input class="field" id="incDate" type="date">
+    </label>
+    <p class="err" id="incErr" hidden></p>
+    <button class="submit good" id="incSave">Ajouter</button>
+    <button type="button" class="toggle" id="incToggle" hidden></button>
+    <button type="button" class="remove" id="incRemove" hidden>Supprimer</button>
   </form>
 </div>
 <div class="toast" id="toast" hidden></div>
@@ -416,19 +497,161 @@ function openSheet(e) {
   $("err").hidden = true;
   syncChips();
   $("sheet").hidden = false; $("sheet").scrollTop = 0;
-  $("open").hidden = true;
+  $("dock").hidden = true;
   document.body.classList.add("locked");
   if (!e) $("amount").focus();
 }
 function closeSheet() {
-  $("sheet").hidden = true; $("open").hidden = false;
+  $("sheet").hidden = true; $("dock").hidden = false;
   document.body.classList.remove("locked");
   editing = null;
 }
 
-$("open").onclick = () => openSheet();
+$("open").onclick = () => view === "inc" ? openInc() : openSheet();
 $("cancel").onclick = closeSheet;
-document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") { closeSheet(); closeInc(); } });
+
+// ---- views: expenses / incoming money ----
+let view = "exp";
+const ICON_INC = `<path d="M12 3v11"/><path d="m7 9 5 5 5-5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>`;  // money coming in
+const ICON_EXP = `<path d="M8 6h12"/><path d="M8 12h12"/><path d="M8 18h12"/><path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/>`;  // expense list
+$("swapIcon").innerHTML = ICON_INC;
+function showView(v) {
+  $("swapIcon").innerHTML = v === "inc" ? ICON_EXP : ICON_INC;
+  $("badge").classList.toggle("off", v === "inc");
+  view = v;
+  $("viewExp").hidden = v !== "exp";
+  $("viewInc").hidden = v !== "inc";
+  $("open").classList.toggle("good", v === "inc");
+  $("openLabel").textContent = v === "inc" ? "Rentrée" : "Dépense";
+  $("swap").className = "swap " + (v === "inc" ? "blue" : "good");
+  $("swap").setAttribute("aria-label", v === "inc" ? "Retour aux dépenses" : "Rentrées d'argent");
+  window.scrollTo(0, 0);
+}
+$("swap").onclick = () => showView(view === "inc" ? "exp" : "inc");
+
+// ---- incoming money: sums waiting to land on the account ----
+let incomes = [];      // all incomes, pending first
+let incEditing = null;
+const fmtDay = d => { const [y, m, dd] = d.split("-").map(Number); return new Date(y, m - 1, dd).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: y === new Date().getFullYear() ? undefined : "numeric" }); };
+
+async function loadIncomes() {
+  // ponytail: loads every income at once, fine for a personal list (cap 1000, then page by date)
+  const { data, error } = await sb.from("incomes")
+    .select("id, amount_cents, description, created_on, received_on, created_at")
+    .order("created_on", { ascending: false }).order("created_at", { ascending: false })
+    .limit(1000);
+  if (error) { $("incStatus").textContent = "Impossible de charger tes rentrées. Vérifie ta connexion."; $("incStatus").hidden = false; return; }
+  $("incStatus").hidden = true;
+  incomes = data;
+  renderIncomes();
+}
+
+function renderIncomes() {
+  const pending = incomes.filter(i => !i.received_on);
+  const done = incomes.filter(i => i.received_on).sort((a, b) => b.received_on.localeCompare(a.received_on));
+  const sum = l => l.reduce((s, i) => s + i.amount_cents, 0);
+  const cur = thisMonth();
+  const gotThisMonth = sum(done.filter(i => i.received_on.slice(0, 7) === cur));
+
+  $("incTotal").textContent = money(sum(pending));
+  $("incSub").textContent = `${pending.length} paiement${pending.length > 1 ? "s" : ""} à recevoir` +
+    (gotThisMonth ? ` · reçu en ${monthLabel(cur, { month: "long" })} : ${money(gotThisMonth)}` : "");
+  $("badge").textContent = pending.length;
+  $("badge").hidden = !pending.length;
+
+  const row = i => {
+    const el = document.createElement("div");
+    el.className = "inc" + (i.received_on ? " done" : "");
+    el.innerHTML = `<button class="inc-main"><span class="what"><b></b><small></small></span><span class="amt num"></span></button>`;
+    el.querySelector("b").textContent = i.description;
+    el.querySelector("small").textContent = i.received_on ? `Reçu le ${fmtDay(i.received_on)}` : `En attente depuis le ${fmtDay(i.created_on)}`;
+    el.querySelector(".amt").textContent = "+" + money(i.amount_cents);
+    el.querySelector(".inc-main").setAttribute("aria-label", `Modifier ${i.description}, ${money(i.amount_cents)}`);
+    el.querySelector(".inc-main").onclick = () => openInc(i);
+    if (!i.received_on) {
+      const got = document.createElement("button");
+      got.className = "got"; got.textContent = "Reçu";
+      got.setAttribute("aria-label", `Marquer ${i.description} comme reçu`);
+      got.onclick = () => setReceived(i, ymd(new Date()));
+      el.append(got);
+    }
+    return el;
+  };
+  $("incPending").replaceChildren(...pending.map(row));
+  if (!pending.length) $("incPending").innerHTML = `<p class="empty">Rien en attente. Appuie sur « + Rentrée » pour noter un remboursement ou un paiement à recevoir.</p>`;
+  $("incDone").replaceChildren(...done.slice(0, 50).map(row));
+  if (!done.length) $("incDone").innerHTML = `<p class="empty">Les sommes marquées « Reçu » apparaîtront ici.</p>`;
+}
+
+async function setReceived(i, date) {
+  const { error } = await sb.from("incomes").update({ received_on: date }).eq("id", i.id);
+  if (error) { toast("Mise à jour impossible, réessaie"); return false; }
+  i.received_on = date;
+  renderIncomes();
+  toast(date ? `${money(i.amount_cents)} reçu` : "Remis en attente");
+  return true;
+}
+
+function openInc(i) {
+  incEditing = i || null;
+  $("incTitle").textContent = i ? "Modifier" : "Argent à recevoir";
+  $("incSave").textContent = i ? "Enregistrer" : "Ajouter";
+  $("incAmount").value = i ? (i.amount_cents / 100).toFixed(2).replace(".", ",") : "";
+  $("incDesc").value = i ? i.description : "";
+  $("incDate").value = i ? i.created_on : ymd(new Date());
+  $("incToggle").hidden = !i;
+  if (i) $("incToggle").textContent = i.received_on ? "Remettre en attente" : "Marquer comme reçu";
+  $("incRemove").hidden = !i;
+  $("incRemove").classList.remove("armed");
+  $("incRemove").textContent = "Supprimer";
+  $("incErr").hidden = true;
+  $("incSheet").hidden = false; $("incSheet").scrollTop = 0;
+  $("dock").hidden = true;
+  document.body.classList.add("locked");
+  if (!i) $("incAmount").focus();
+}
+function closeInc() {
+  $("incSheet").hidden = true; $("dock").hidden = false;
+  document.body.classList.remove("locked");
+  incEditing = null;
+}
+$("incCancel").onclick = closeInc;
+$("incToggle").onclick = async () => {
+  if (await setReceived(incEditing, incEditing.received_on ? null : ymd(new Date()))) closeInc();
+};
+$("incRemove").onclick = async () => {
+  const btn = $("incRemove");
+  if (!btn.classList.contains("armed")) { btn.classList.add("armed"); btn.textContent = "Confirmer la suppression"; return; }
+  const id = incEditing.id;
+  btn.disabled = true;
+  const { error } = await sb.from("incomes").delete().eq("id", id);
+  btn.disabled = false;
+  if (error) { $("incErr").textContent = "Suppression impossible. Vérifie ta connexion et réessaie."; $("incErr").hidden = false; return; }
+  incomes = incomes.filter(x => x.id !== id);
+  closeInc(); renderIncomes(); toast("Supprimé");
+};
+$("incForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const amount = parseCents($("incAmount").value);
+  const description = $("incDesc").value.trim();
+  const date = $("incDate").value;
+  const fail = msg => { $("incErr").textContent = msg; $("incErr").hidden = false; };
+  if (!amount) { fail("Entre un montant, par exemple 45,00."); $("incAmount").focus(); return; }
+  if (!description) { fail("Ajoute une description, par exemple « Remboursement resto par Léa »."); $("incDesc").focus(); return; }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { fail("Choisis une date."); return; }
+  $("incSave").disabled = true;
+  const fields = { amount_cents: amount, description, created_on: date };
+  const wasEdit = !!incEditing;
+  const { error } = wasEdit
+    ? await sb.from("incomes").update(fields).eq("id", incEditing.id)
+    : await sb.from("incomes").insert(fields);
+  $("incSave").disabled = false;
+  if (error) { fail("Enregistrement impossible. Vérifie ta connexion et réessaie."); return; }
+  closeInc();
+  toast(wasEdit ? "Modifié" : `${money(amount)} en attente`);
+  loadIncomes();
+});
 
 // monthly budget, stored on the account (user metadata) so it follows every device
 function openBudget() {
@@ -556,10 +779,10 @@ sb.auth.onAuthStateChange((event, session) => {
     user = session.user;
     showApp(true);
     // setTimeout: calling Supabase from inside this callback can deadlock its auth lock
-    if (event !== "TOKEN_REFRESHED") { render(); setTimeout(load, 0); }
+    if (event !== "TOKEN_REFRESHED") { render(); setTimeout(() => { load(); loadIncomes(); }, 0); }
     return;
   }
-  if (event === "SIGNED_OUT" && !keep.get()) { rows = []; user = null; showApp(false); return; }
+  if (event === "SIGNED_OUT" && !keep.get()) { rows = []; incomes = []; user = null; showView("exp"); showApp(false); return; }
   // no session but we still hold a token: reconnect silently
   if (keep.get()) { setTimeout(recover, 0); return; }
   showApp(false);
@@ -567,7 +790,7 @@ sb.auth.onAuthStateChange((event, session) => {
 
 // coming back to the app after a while: make sure the token is fresh
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") sb.auth.getSession().then(({ data }) => { if (!data.session) recover(); else load(); });
+  if (document.visibilityState === "visible") sb.auth.getSession().then(({ data }) => { if (!data.session) recover(); else { load(); loadIncomes(); } });
 });
 </script>
 </body>
